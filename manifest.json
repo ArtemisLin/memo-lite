@@ -1,0 +1,14 @@
+{
+    "id": "memo-lite",
+    "name": "Memo Lite",
+    "version": "1.0.0",
+    "minAppVersion": "0.15.0",
+    "description": "轻量级笔记捕捉插件,让你在 Obsidian 中快速记录和管理灵感。",
+    "author": "ArtemisLin",
+    "authorUrl": "https://github.com/ArtemisLin",
+    "isDesktopOnly": false,
+    "fundingUrl": {
+      "GitHub Sponsor": "https://github.com/sponsors/yourusername",
+      "Buy Me a Coffee": "https://www.buymeacoffee.com/yourusername"
+    }
+  }

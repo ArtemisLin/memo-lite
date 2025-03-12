@@ -1,0 +1,849 @@
+/* Memo Lite 插件样式 */
+
+/* 主容器 - 固定宽度和位置 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  font-size: 14px;
+  overflow: visible;
+  background-color: var(--background-primary);
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 0 5px;
+  box-sizing: border-box;
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-stats-wrapper {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-around;
+    text-align: center;
+    border-radius: 5px;
+    background-color: var(--background-secondary);
+    padding: 12px 5px;
+    margin-bottom: 15px;
+    width: 100%;
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-stats {
+  /* 添加必要的容器样式 */
+  width: 100%;
+}
+
+/* 输入框和占位符样式 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-input textarea,
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-input::placeholder {
+    padding: 5px;
+    box-sizing: border-box;
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-stat-item {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center;
+    justify-content: center;
+    width: 33.33%;
+}
+
+/* 输入框包装容器 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-input-wrapper {
+    position: relative !important;
+}
+
+/* 修改输入框中的标签高亮样式，使用与卡片一致的颜色 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-input-preview .memo-lite-tag {
+    color: #40c463bb !important; /* 浅绿色 */
+    background-color: rgba(64, 196, 99, 0.1) !important; /* 浅绿色背景，低透明度 */
+    font-weight: 500 !important;
+    border-radius: 4px !important;
+    padding: 0px 2px !important;
+}
+
+/* 输入框预览层样式 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-input-preview {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    padding: 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    pointer-events: none; /* 确保点击事件穿透到输入框 */
+    background-color: transparent;
+    z-index: 2;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    overflow: auto;
+    box-sizing: border-box;
+    letter-spacing: 0.1px;
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-stat-item h2 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: bold;
+    color: #82c366; /* 使用绿色强调数字 */
+    line-height: 1.2;
+}
+  
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-stat-item p {
+    margin: 0;
+    font-size: 14px;
+    opacity: 0.8;
+    color: var(--text-normal);
+}
+
+/* 日历热力图 - 增加高度 *//* 热力图容器样式 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-heatmap-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    background-color: var(--background-secondary);
+    border-radius: 6px;
+    margin-bottom: 16px;
+    max-width: 100%;
+}
+  
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-heatmap-container h4 {
+    margin: 0 0 5px 0;
+    font-size: 14px;
+    font-weight: 500;
+}
+  
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-heatmap {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 5px;
+    max-width: 100%;
+    overflow: visible;
+}
+  
+/* 创建内部容器使对齐更好 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-heatmap-container-inner {
+    display: flex;
+    width: 100%;
+    overflow-x: visible;
+    padding-right: 20px;
+    padding-left: 15px;
+}
+  
+/* 星期标签列 - 左侧 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-heatmap-weekdays {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-right: 4px;
+    padding-top: 20px; /* 为月份标签留出空间 */
+}
+  
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-heatmap-weekday-label {
+    height: 14px; /* 调整高度与网格格子一致 */
+    line-height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    font-size: 10px;
+    color: var(--text-muted);
+    text-align: right;
+    padding-right: 4px;
+    margin-bottom: 2px; /* 与网格间隙匹配 */
+}
+  
+/* 主热力图区域 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-heatmap-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+    width: calc(100% - 20px); /* 确保有足够空间显示内容 */
+    margin-right: 20px; /* 右侧添加margin防止裁剪 */
+}
+  
+/* 月份行样式 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-heatmap-months {
+    display: flex;
+    justify-content: space-between;
+    height: 20px;
+    margin-bottom: 2px;
+    width: 100%;
+    padding: 0 5px;
+}
+  
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-heatmap-month-label {
+    text-align: center;
+    font-size: 10px;
+    color: var(--text-muted);
+    overflow: hidden;
+    white-space: nowrap;
+    flex: 1;
+}
+  
+/* 主热力图区域调整大小 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-heatmap-days-grid {
+    display: grid;
+    grid-template-columns: repeat(53, 1fr);
+    grid-template-rows: repeat(7, 14px);
+    gap: 2px;
+}
+  
+/* 日期格子样式 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-heatmap-day {
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+}
+  
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-heatmap-day:hover {
+    transform: scale(1.2);
+}
+  
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-heatmap-day.active {
+    border: 1px solid var(--text-accent);
+}
+  
+/* 图例样式 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-heatmap-legend {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    margin-top: 8px;
+    font-size: 10px;
+    color: var(--text-muted);
+}
+  
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-heatmap-legend-box {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+}
+  
+/* 空数据提示 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-empty-data {
+    padding: 10px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+/* 空白格子 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-heatmap-day-empty {
+    width: 12px;
+    height: 12px;
+    margin: 1px;
+    opacity: 0.2;
+    background-color: var(--background-secondary);
+}
+
+/* 提示框 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-heatmap-tooltip {
+    position: fixed;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background-color: var(--background-secondary-alt);
+    font-size: 11px;
+    pointer-events: none;
+    z-index: 1000;
+}
+
+/* 输入区域 - 增加高度 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-input-container {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-bottom: 5px;
+    flex-shrink: 0; /* 不收缩 */
+    padding: 0 10px; /* 添加左右内边距 */
+    width: calc(100% - 20px); /* 减去内边距以保持总宽度 */
+    box-sizing: border-box; /* 确保内边距不增加总宽度 */
+    width: 100%;
+    max-width: 1500px;
+    margin: 0 auto;
+}
+
+/* 输入框样式 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-input {
+    width: 100%;
+    min-height: 100px;
+    max-height: 200px;
+    padding: 8px;
+    border-radius: 5px;
+    border: 1px solid var(--background-modifier-border);
+    background-color: var(--background-primary);
+    resize: vertical;
+    font-size: 13px;
+    line-height: 1.5;
+    box-sizing: border-box;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    position: relative;
+    z-index: 1;
+    letter-spacing: 0.1px;
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-submit {
+    align-self: flex-end;
+    padding: 3px 10px;
+    border-radius: 4px;
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+    font-weight: 500;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-submit:hover {
+    background-color: var(--interactive-accent-hover);
+}
+
+/* 模板选择器样式 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-template-selector-container {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-template-label {
+    margin-right: 10px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-template-selector {
+    flex: 1;
+    padding: 3px 5px;
+    font-size: 12px;
+    border-radius: 4px;
+    border: 1px solid var(--background-modifier-border);
+    background-color: var(--background-primary);
+}
+
+/* 标签区域 - 可展开收起，限制高度 */
+/* 可视化标签容器 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-input-tags-container {
+    display: none; /* 默认隐藏，直到有标签被添加 */
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 8px;
+    padding: 5px 0;
+}
+
+/* 可视化标签样式 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-visual-tag {
+    display: inline-flex;
+    align-items: center;
+    background-color: var(--background-secondary);
+    border-radius: 15px;
+    padding: 3px 10px;
+    margin-right: 5px;
+    margin-bottom: 5px;
+    font-size: 12px;
+    color: var(--text-normal);
+    font-weight: 500;
+}
+
+/* 删除按钮样式 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-visual-tag-remove {
+    margin-left: 5px;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background-color: rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-visual-tag-remove:hover {
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-tags-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    position: sticky; /* 使标题固定在顶部 */
+    top: 0;
+    background-color: var(--background-secondary-alt); /* 确保标题不透明 */
+    z-index: 10;
+    padding: 2px 0;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-tags-toggle {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-tags-container h4 {
+    margin: 0 0 5px 0;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    max-height: 90px; /* 收起状态高度 */
+    overflow-y: auto;
+    padding: 3px;
+    transition: max-height 0.3s ease;
+}
+
+/* 在styles.css中添加 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-display-layer .memo-lite-tag {
+    color: #40c463 !important; /* 浅绿色 */
+    font-weight: 500 !important;
+    background-color: rgba(64, 196, 99, 0.1) !important;
+    border-radius: 4px !important;
+    padding: 0px 2px !important;
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-content-section {
+    background-color: transparent !important;
+    padding-top: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-tags-container {
+    box-shadow: none !important;
+    border: none !important;
+    background-color: transparent !important;
+    /* 可能需要调整以下值 */
+    padding: 0 !important;
+    margin-top: 0 !important;
+    margin-bottom: 5px !important;
+}
+
+/* 标签项样式 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-tag-item {
+    display: flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 15px; /* 增加圆角，更像标签 */
+    background-color: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border); /* 添加边框 */
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 12px;
+    margin: 2px; /* 增加间距 */
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-tag-item:hover {
+    background-color: var(--background-secondary-alt);
+    transform: translateY(-1px); /* 添加悬停效果 */
+    box-shadow: 0 2px 3px rgba(0, 0, 0, 0.1); /* 添加阴影 */
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-tag-item.active {
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+    font-weight: 500; /* 加粗文字 */
+    border-color: var(--interactive-accent); /* 边框也变色 */
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-tag-count {
+    margin-left: 5px;
+    font-size: 10px;
+    opacity: 0.7;
+    background-color: rgba(0,0,0,0.1);
+    border-radius: 10px;
+    padding: 1px 5px;
+}
+
+/* 添加到styles.css或通过JavaScript注入 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-tag, 
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-memo-content .memo-lite-tag {
+    color: #40c463 !important; /* 浅绿色 */
+    font-weight: 500 !important;
+    background-color: rgba(64, 196, 99, 0.1) !important;
+    border-radius: 4px !important;
+    padding: 0px 2px !important;
+}
+
+/* 搜索区域 - 移动到卡片栏上方 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-search-container {
+    margin-bottom: 5px;
+    display: block; /* 确保可见 */
+    flex-shrink: 0; /* 不收缩 */
+    order: -1; /* 移动到内容区域顶部 */
+    margin-top: 5px;
+
+    /* 添加这些属性来移除阴影 */
+    box-shadow: none !important;
+    border: none !important;
+    background-color: transparent !important;
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-search {
+    width: 100%;
+    padding: 5px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--background-modifier-border);
+    background-color: var(--background-primary);
+    font-size: 12px;
+    margin-bottom: 8px; /* 增加与下方元素的间距 */
+    box-shadow: none !important;
+    border: 1px solid var(--background-modifier-border) !important;
+    background-color: var(--background-primary) !important;
+}
+
+/* Memo列表区域 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-memos-container {
+    flex: 1;
+    overflow: hidden;
+    border-radius: 5px;
+    background-color: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-memos {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    height: 100%;
+    overflow-y: auto; /* 使列表可滚动 */
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-memo-item {
+    padding: 10px;
+    border-radius: 5px;
+    background-color: var(--background-secondary);
+    cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.2s;
+    position: relative; /* 用于定位右键菜单 */
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-memo-item:hover {
+    background-color: var(--background-secondary-alt);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 可以添加提示工具提示 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-memo-item::after {
+    content: "双击编辑";
+    position: absolute;
+    right: 10px;
+    top: 10px;
+    font-size: 10px;
+    opacity: 0;
+    color: var(--text-muted);
+    transition: opacity 0.2s;
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-memo-item:hover::after {
+    opacity: 0.7;
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-memo-content {
+    margin-bottom: 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 13px;
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-memo-date {
+    font-size: 11px;
+    opacity: 0.7;
+    text-align: right;
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-tag {
+    color: #40c463bb !important;
+    font-weight: 500 !important;
+}
+
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-empty {
+    padding: 20px;
+    text-align: center;
+    opacity: 0.5;
+    font-size: 13px;
+}
+
+/* 标签自动补全菜单 */
+/* 修改标签建议菜单的样式 */
+.memo-lite-tag-suggestion-menu {
+    position: absolute;
+    background-color: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    min-width: 120px;
+    max-width: 200px;
+    max-height: 150px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+    padding: 4px 0;
+}
+  
+.memo-lite-tag-suggestion {
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+  
+.memo-lite-tag-suggestion:hover,
+.memo-lite-tag-suggestion.selected {
+    background-color: var(--background-secondary-alt);
+}
+  
+.memo-lite-tag-suggestion strong {
+    color: #40c463; /* 使用标签的绿色 */
+    font-weight: 600;
+}
+
+/* 删除确认对话框 - 添加"不再提醒"选项样式 */
+.memo-lite-checkbox-container {
+    display: flex;
+    align-items: center;
+    margin: 10px 0;
+}
+
+.memo-lite-do-not-remind {
+    margin-right: 8px;
+}
+
+.memo-lite-checkbox-label {
+    display: flex;
+    align-items: center;
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+/* 确保预览区域样式没变 */
+.memo-lite-delete-preview {
+    padding: 10px;
+    margin: 10px 0;
+    background-color: var(--background-secondary);
+    border-radius: 5px;
+    max-height: 100px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* 对话框样式 */
+.memo-lite-edit-modal .memo-lite-modal-buttons,
+.memo-lite-delete-modal .memo-lite-modal-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 15px;
+    flex-shrink: 0; /* 防止按钮区域被压缩 */
+    position: relative; /* 确保按钮区域不会被隐藏 */
+    z-index: 10; 
+}
+
+.memo-lite-modal-button {
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    font-size: 14px;
+    border: none;
+}
+
+.memo-lite-cancel-button {
+    background-color: var(--background-secondary);
+    color: var(--text-normal);
+}
+
+.memo-lite-cancel-button:hover {
+    background-color: var(--background-secondary-alt);
+}
+
+.memo-lite-confirm-button, .memo-lite-save-button {
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+
+.memo-lite-confirm-button:hover, .memo-lite-save-button:hover {
+    background-color: var(--interactive-accent-hover);
+}
+
+.memo-lite-edit-modal .modal-close-button,
+.memo-lite-edit-textarea::after {
+    display: none !important;
+}
+  
+/* 编辑对话框样式 */
+.memo-lite-edit-modal {
+    width: 85%; /* 初始宽度 */
+    max-width: 700px; 
+    min-width: 600px; /* 确保最小宽度 */
+    height: 75vh; /* 设置为视窗高度的80% */
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    z-index: 100;
+    resize: none !important;
+}
+
+/* 确保文本区域自动适应可用空间 */
+.memo-lite-edit-modal .modal-content > div {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+  
+.memo-lite-edit-modal .modal-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    padding: 20px;
+    height: calc(100% - 40px); /* 减去padding */
+}
+    
+.memo-lite-edit-title {
+    margin-bottom: 15px;
+    color: var(--text-normal);
+}
+    
+.memo-lite-edit-textarea-container {
+    flex-grow: 1; /* 让容器占据所有可用空间 */
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+    margin-bottom: 15px;
+}
+
+.memo-lite-edit-textarea {
+    flex-grow: 1; /* 文本框填充容器 */
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 300px;
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid var(--background-modifier-border);
+    background-color: var(--background-primary);
+    resize: none; /* 禁用手动调整大小，因为我们已经设置了最佳大小 */
+    font-size: 14px;
+    line-height: 1.5;
+    font-family: var(--font-text);
+    color: var(--text-normal);
+    box-sizing: border-box;
+    resize: none !important;
+}
+
+.memo-lite-edit-textarea:focus {
+    border-color: var(--interactive-accent);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+}
+
+/* 删除确认对话框样式 */
+.memo-lite-delete-warning-title {
+    color: #e67e22;
+    margin-bottom: 10px;
+}
+
+.memo-lite-delete-warning-text {
+    color: #e74c3c;
+    font-weight: 500;
+    margin-bottom: 15px;
+}
+
+.memo-lite-delete-button {
+    background-color: #e74c3c !important;
+}
+
+.memo-lite-delete-button:hover {
+    background-color: #c0392b !important;
+}
+
+/* 移除可能影响宽度计算的元素 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-display-layer span {
+    display: inline !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+}
+
+/* 确保不同元素的盒模型一致 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-input, 
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-display-layer {
+    box-sizing: border-box !important;
+}
+
+/* 编辑模式下的标签高亮 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-memo-edit-display .memo-lite-tag {
+    color: #40c463bb !important; /* 绿色 */
+    font-weight: 500 !important;
+    background-color: rgba(64, 196, 99, 0.1) !important;
+    border-radius: 4px !important;
+    padding: 0px 2px !important;
+}
+
+/* 编辑文本区域样式 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-memo-edit-textarea {
+    width: 100%;
+    height: 100%;
+    resize: none;
+    border: none;
+    padding: 10px;
+    background-color: transparent;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    color: transparent !important;
+    caret-color: var(--text-normal) !important;
+    letter-spacing: 0.1px !important; /* 微调字符间距 */
+    box-sizing: border-box !important;
+    position: relative;
+    z-index: 1;
+}
+
+/* 编辑显示层样式 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-memo-edit-display {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    padding: 10px; /* 与文本区域相同的内边距 */
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background-color: transparent;
+    pointer-events: none;
+    z-index: 2;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    letter-spacing: 0.1px !important; /* 与文本区域相同的字符间距 */
+    box-sizing: border-box !important;
+}
+
+/* 编辑包装器样式 */
+.workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-memo-edit-wrapper {
+    position: relative;
+    flex: 1;
+    overflow: hidden;
+}
