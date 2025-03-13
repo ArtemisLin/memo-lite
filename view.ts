@@ -234,7 +234,8 @@ class TagSuggestionMenu {
   onSelectTag: (tag: string) => void;
   inputEl: HTMLTextAreaElement;
   menuEl: HTMLElement | null = null;
-  
+  private timeouts: (number | NodeJS.Timeout)[] = [];
+
   constructor(containerEl: HTMLElement, inputEl: HTMLTextAreaElement, onSelectTag: (tag: string) => void) {
     // 使用输入框的父元素作为容器，确保菜单可以相对于输入框定位
     this.containerEl = inputEl.parentElement || containerEl;
@@ -297,7 +298,7 @@ class TagSuggestionMenu {
     this.menuEl.style.top = `${inputRect.top + 30}px`; // 输入框下方30px处
     
     // 确保菜单不超出视口
-    setTimeout(() => {
+    const menuPositionTimeoutId = setTimeout(() => {
       if (!this.menuEl) return;
       
       const menuRect = this.menuEl.getBoundingClientRect();
@@ -314,6 +315,7 @@ class TagSuggestionMenu {
         this.menuEl.style.top = `${inputRect.top - menuRect.height - 10}px`; // 放在输入框上方
       }
     }, 0);
+    this.timeouts.push(menuPositionTimeoutId);
   }
   
   // 隐藏建议菜单
@@ -465,18 +467,33 @@ export class MemoView extends ItemView {
   availableTemplates: string[] = [];
   tagsContainer: HTMLElement;
   currentEditingCard: HTMLElement | null = null;
-  
+  editButtonStyle: HTMLStyleElement | null = null;
+  hideTopRightEditButtonStyle: HTMLStyleElement | null = null;
+  hideEditTextStyle: HTMLStyleElement | null = null;
+
+  private timeouts: (number | NodeJS.Timeout)[] = [];
     // 在 MemoView 类中添加属性来存储绑定后的事件处理函数
   private boundHandleTagAutocompletion: (e: Event) => void;
   private boundHighlightTagsInInput: (e: Event) => void;
   private boundHandleKeydown: (e: KeyboardEvent) => void;
+  private throttledHighlight: (this: HTMLElement, ev: Event) => void;
+  // 在MemoView类中添加这些属性
+  private displayLayer: HTMLElement | null = null;
+  private updateHighlightBound: any = null;
+  private scrollHandlerBound: any = null;
 
   // 添加缺失的属性声明
-  cardEventHandlers: WeakMap<Element, (e: MouseEvent) => void>;
-  styleElement: HTMLStyleElement | null = null;
-  boundSubmitButtonClick: () => Promise<void>;
-  boundTagsHeaderClick: () => void;
-  boundSearchInput: () => void;
+    cardEventHandlers: WeakMap<Element, {
+      mouseEnter?: (e: MouseEvent) => void;
+      mouseLeave?: (e: MouseEvent) => void;
+      button?: HTMLElement;
+      buttonClick?: (e: MouseEvent) => void;
+      documentClick?: (e: MouseEvent) => void;
+    }>;
+    styleElement: HTMLStyleElement | null = null;
+    boundSubmitButtonClick: () => Promise<void>;
+    boundTagsHeaderClick: () => void;
+    boundSearchInput: () => void;
 
   constructor(leaf: WorkspaceLeaf, memoManager: MemoManager) {
     super(leaf);
@@ -487,6 +504,68 @@ export class MemoView extends ItemView {
     // 初始化卡片事件处理器集合
     this.cardEventHandlers = new WeakMap();
   }
+  debounce<T extends (...args: any[]) => any>(func: T, wait: number): T {
+    let timeout: number | null = null;
+    return ((...args: Parameters<T>): ReturnType<T> => {
+      if (timeout) clearTimeout(timeout);
+      timeout = window.setTimeout(() => {
+        func(...args);
+        timeout = null;
+      }, wait) as unknown as number;
+      return undefined as unknown as ReturnType<T>;
+    }) as T;
+  }
+
+ // 添加节流函数
+  // 简化版本的节流函数
+  throttle(func: Function, delay: number): Function {
+    let lastCall = 0;
+    return (...args: any[]) => {
+      const now = Date.now();
+      if (now - lastCall >= delay) {
+        lastCall = now;
+        func(...args);
+      }
+    };
+  }
+
+  throttleHighlight(func: (...args: any[]) => any, delay: number) {
+    let lastCall = 0;
+    // 创建一个符合 EventListener 签名的函数
+    const eventHandler = function(this: HTMLElement, event: Event) {
+      const now = Date.now();
+      if (now - lastCall >= delay) {
+        lastCall = now;
+        func.call(this, event);
+      }
+    };
+    // 显式返回类型化的函数
+    return eventHandler;
+  }
+  
+
+  // 保存光标位置的辅助函数
+  saveCursorPosition() {
+    if (!this.inputEl) return null;
+    return {
+      start: this.inputEl.selectionStart,
+      end: this.inputEl.selectionEnd
+    };
+  }
+
+// 恢复光标位置的辅助函数
+  restoreCursorPosition(position: {start: number, end: number} | null) {
+    if (!position || !this.inputEl) return;
+    
+    try {
+      this.inputEl.setSelectionRange(position.start, position.end);
+      // 确保输入框保持焦点
+      this.inputEl.focus();
+    } catch (e) {
+      console.error("Failed to restore cursor position:", e);
+    }
+  }
+
   getViewType(): string {
     return MEMO_VIEW_TYPE;
   }
@@ -576,17 +655,17 @@ export class MemoView extends ItemView {
     });
     
     // 绑定事件处理函数，确保在清理时可以正确移除
-    this.boundHandleTagAutocompletion = this.handleTagAutocompletion.bind(this);
-    this.boundHighlightTagsInInput = this.highlightTagsInInput.bind(this);
+    this.boundHandleTagAutocompletion = this.debounce(this.handleTagAutocompletion.bind(this), 150);
+    this.boundHighlightTagsInInput = this.debounce(this.highlightTagsInInput.bind(this), 100);
     
     // 添加输入事件监听，实时高亮标签
     this.inputEl.addEventListener('input', this.boundHandleTagAutocompletion);
-    this.inputEl.addEventListener('input', this.boundHighlightTagsInInput);
-    
-    // 同时，在滚动和焦点事件中也调用高亮函数
-    this.inputEl.addEventListener('scroll', this.boundHighlightTagsInInput);
-    this.inputEl.addEventListener('focus', this.boundHighlightTagsInInput);
-    
+    // 然后将原有的highlightTagsInInput方法包装为节流版本
+    this.throttledHighlight = this.throttleHighlight(this.highlightTagsInInput.bind(this), 100) as EventListener;
+    this.inputEl.addEventListener('input', this.throttledHighlight);
+    this.inputEl.addEventListener('scroll', this.throttledHighlight);
+    this.inputEl.addEventListener('focus', this.throttledHighlight);
+
     // 绑定键盘事件处理函数
     this.boundHandleKeydown = (e: KeyboardEvent) => {
       // Ctrl+Enter 提交
@@ -664,8 +743,12 @@ export class MemoView extends ItemView {
         this.highlightTagsInInput();
         // 重新加载数据
         await this.loadData();
+        // 添加高亮样式
+        this.addHighlightStyles();
+
         // 重新设置高亮（关键！）
         this.setupRealTimeTagHighlight();
+        
         // 显示通知
         new Notice('笔记已保存');
       }
@@ -728,7 +811,7 @@ export class MemoView extends ItemView {
       // 更新备忘录列表显示
       // 清空备忘录列表
       this.memoListEl.empty();
-      
+      /*
       // 遍历并显示过滤后的备忘录
       filteredMemos.forEach(memo => {
         const memoEl = this.memoListEl.createDiv({ cls: 'memo-lite-memo' });
@@ -746,7 +829,8 @@ export class MemoView extends ItemView {
         
         // 创建操作按钮区域
         const actionsEl = memoEl.createDiv({ cls: 'memo-lite-memo-actions' });
-        
+        */
+        /*
         // 编辑按钮
         const editButton = actionsEl.createEl('button', {
           cls: 'memo-lite-memo-action',
@@ -760,8 +844,9 @@ export class MemoView extends ItemView {
         
         editButton.addEventListener('click', editClickHandler);
         (editButton as any).memoLiteHandler = editClickHandler;
-        
+        */
         // 删除按钮
+        /*
         const deleteButton = actionsEl.createEl('button', {
           cls: 'memo-lite-memo-action',
           text: '删除'
@@ -787,9 +872,22 @@ export class MemoView extends ItemView {
         deleteButton.addEventListener('click', deleteClickHandler);
         (deleteButton as any).memoLiteHandler = deleteClickHandler;
       });
+      // 使用renderMemosBatch函数渲染搜索结果
+      */
+        this.renderMemosBatch(filteredMemos);
     };
     
     this.searchEl.addEventListener('input', this.boundSearchInput);
+
+    // 添加Enter键处理
+    // 添加Enter键处理
+      const searchKeydownHandler = (e: KeyboardEvent) => {
+        if (e.key === 'Enter') {
+          this.boundSearchInput();
+        }
+      };
+      this.searchEl.addEventListener('keydown', searchKeydownHandler);
+      (this as any).searchKeydownHandler = searchKeydownHandler;
     
     const memosContainer = contentSection.createDiv({ cls: 'memo-lite-memos-container' });
     memosContainer.style.flex = '1';
@@ -813,6 +911,20 @@ export class MemoView extends ItemView {
     // 加载数据
     await this.loadData();
 
+    // 在onOpen方法中，在setupRealTimeTagHighlight之前添加
+    const hideTopRightEditText = document.createElement('style');
+    hideTopRightEditText.id = 'memo-lite-hide-edit-text';
+    hideTopRightEditText.textContent = `
+      /* 覆盖右上角显示的"双击编辑"文字 */
+      .workspace-leaf-content[data-type="memo-lite-view"] .memo-lite-memo-item::after {
+        content: "" !important; /* 移除内容 */
+        display: none !important; /* 完全隐藏元素 */
+      }
+    `;
+    document.head.appendChild(hideTopRightEditText);
+
+    // 保存引用以便在onClose中移除
+    this.hideEditTextStyle = hideTopRightEditText;
     // 设置实时标签高亮 - 确保这是最后调用的方法
     this.setupRealTimeTagHighlight();
   }
@@ -942,12 +1054,38 @@ export class MemoView extends ItemView {
   // 添加在类的其他方法旁边，比如在handleTagAutocompletion方法后面
   // 简化版的高亮函数
   highlightTagsInInput() {
-    // 如果输入框不可见，先恢复它
-    this.inputEl.style.opacity = '1';
-    this.inputEl.style.color = '';  // 恢复默认颜色
+    // 如果输入框不存在，直接返回
+    if (!this.inputEl) return;
     
     // 获取输入框内容
     const text = this.inputEl.value;
+    
+    // 优化：如果没有标签，直接清除样式并返回
+    if (!text.includes('#')) {
+      // 恢复输入框默认样式
+      this.inputEl.style.opacity = '1';
+      this.inputEl.style.color = '';
+      
+      // 移除可能存在的预览层
+      const parentElement = this.inputEl.parentElement;
+      if (parentElement) {
+        const existingPreview = parentElement.querySelector('.memo-lite-input-preview');
+        if (existingPreview) {
+          parentElement.removeChild(existingPreview);
+        }
+        
+        // 移除任何假光标
+        const fakeCursor = parentElement.querySelector('.memo-lite-fake-cursor');
+        if (fakeCursor) {
+          parentElement.removeChild(fakeCursor);
+        }
+      }
+      return;
+    }
+    
+    // 如果输入框不可见，先恢复它
+    this.inputEl.style.opacity = '1';
+    this.inputEl.style.color = '';  // 恢复默认颜色
     
     // 确保父元素存在
     const parentElement = this.inputEl.parentElement;
@@ -968,7 +1106,7 @@ export class MemoView extends ItemView {
     // 创建一个简单的正则来查找标签
     const tagRegex = /#([^\s#]+)/g;
     
-    // 如果没有标签，直接返回，不应用任何特殊样式
+    // 如果没有标签匹配，直接返回，不应用任何特殊样式
     if (!text.match(tagRegex)) return;
     
     // 否则，应用特殊样式
@@ -990,119 +1128,229 @@ export class MemoView extends ItemView {
     
     const parentElement = this.inputEl.parentElement;
     
-    // 1. 查找是否已经存在显示层，如果存在则移除它
+    // 清理旧的事件监听器
+    this.cleanupHighlightEvents();
+    
+    // 查找是否已经存在显示层，如果存在则移除它
     const existingDisplayLayer = parentElement.querySelector('.memo-lite-display-layer');
     if (existingDisplayLayer) {
       parentElement.removeChild(existingDisplayLayer);
     }
     
-    // 2. 创建一个新的显示层
-    const displayLayer = document.createElement('div');
-    displayLayer.className = 'memo-lite-display-layer';
-    
+    // 创建一个新的显示层
+    this.displayLayer = document.createElement('div');
+    this.displayLayer.className = 'memo-lite-display-layer';
+
+    // 调整输入框样式，确保文本完全透明但光标可见
+    this.inputEl.style.color = 'transparent';
+    this.inputEl.style.caretColor = 'var(--text-normal)';
+    this.inputEl.style.background = 'transparent';
+
+    this.inputEl.setAttribute('placeholder', '');
     // 复制输入框的关键样式
     const inputStyle = window.getComputedStyle(this.inputEl);
-    displayLayer.style.position = 'absolute';
-    displayLayer.style.top = '0';
-    displayLayer.style.left = '0';
-    displayLayer.style.width = '100%';
-    displayLayer.style.height = '100%';
-    displayLayer.style.padding = inputStyle.padding;
-    displayLayer.style.fontFamily = inputStyle.fontFamily;
-    displayLayer.style.fontSize = inputStyle.fontSize;
-    displayLayer.style.lineHeight = inputStyle.lineHeight;
-    displayLayer.style.backgroundColor = 'transparent';
-    displayLayer.style.overflow = 'auto';
-    displayLayer.style.whiteSpace = 'pre-wrap';
-    displayLayer.style.wordBreak = 'break-word';
-    displayLayer.style.zIndex = '2';
-    displayLayer.style.pointerEvents = 'none'; // 确保点击事件穿透到输入框
+    this.displayLayer.style.position = 'absolute';
+    this.displayLayer.style.top = '0';
+    this.displayLayer.style.left = '0';
+    this.displayLayer.style.width = '100%';
+    this.displayLayer.style.height = '100%';
+    this.displayLayer.style.padding = inputStyle.padding;
+    this.displayLayer.style.fontFamily = inputStyle.fontFamily;
+    this.displayLayer.style.fontSize = inputStyle.fontSize;
+    this.displayLayer.style.lineHeight = inputStyle.lineHeight;
+    this.displayLayer.style.color = 'var(--text-normal)'; 
+    this.displayLayer.style.backgroundColor = 'transparent';
+    this.displayLayer.style.overflow = 'hidden'; // 改为hidden避免出现滚动条
+    this.displayLayer.style.whiteSpace = 'pre-wrap';
+    this.displayLayer.style.wordBreak = 'break-word';
+    this.displayLayer.style.zIndex = '1'; // 降低z-index, 确保不会覆盖光标
+    this.displayLayer.style.pointerEvents = 'none'; // 确保点击事件穿透到输入框
     
-    parentElement.appendChild(displayLayer);
     
-    // 3. 清除之前可能存在的样式
-    const existingStyles = document.head.querySelectorAll('style.memo-lite-tag-styles');
-    existingStyles.forEach(style => document.head.removeChild(style));
+    parentElement.appendChild(this.displayLayer);
     
-    // 4. 添加新样式
-    const styleElement = document.createElement('style');
-    styleElement.className = 'memo-lite-tag-styles';
-    styleElement.textContent = `
-      .memo-lite-input-wrapper .memo-lite-input {
-        color: transparent !important;
-        caret-color: var(--text-normal) !important;
+    // 调整输入框样式，确保文本颜色透明但光标可见
+    this.inputEl.style.color = 'transparent';
+    this.inputEl.style.caretColor = 'var(--text-normal)';
+    
+    // 创建一个安全的displayLayer引用，确保在闭包中使用时不会出现null错误
+    const displayLayer = this.displayLayer;
+    
+    // 定义更新高亮的实际函数 - 使用局部变量而不是this.displayLayer
+    // 定义更新高亮的实际函数
+    // 定义更新高亮的实际函数
+    const updateHighlight = () => {
+      // 如果displayLayer或inputEl为null直接返回
+      if (!this.displayLayer || !this.inputEl) return;
+      
+      // 创建局部引用
+      const displayLayer = this.displayLayer;
+      const text = this.inputEl.value;
+      
+      // 清空显示层内容
+      while (displayLayer.firstChild) {
+        displayLayer.removeChild(displayLayer.firstChild);
+      }
+      
+      // 如果输入框为空，显示自定义占位符
+      if (!text) {
+        const placeholder = document.createElement('span');
+        placeholder.className = 'memo-lite-display-placeholder';
+        placeholder.textContent = '记录你的灵感...\n使用 #标签 来分类';
+        displayLayer.appendChild(placeholder);
+      } else {
+        // 使用正则表达式一次性找出所有标签
+        const parts = text.split(/(#[^\s#]+)/g);
+        
+        // 为每一部分创建内容
+        parts.forEach(part => {
+          if (part.startsWith('#')) {
+            // 这是一个标签
+            const span = document.createElement('span');
+            span.className = 'memo-lite-tag';
+            span.textContent = part;
+            displayLayer.appendChild(span);
+          } else if (part) {
+            // 普通文本
+            const textNode = document.createTextNode(part);
+            displayLayer.appendChild(textNode);
+          }
+        });
+      }
+      
+      // 同步滚动位置
+      displayLayer.scrollTop = this.inputEl.scrollTop;
+    };
+    
+    // 同步滚动事件 - 同样使用安全的局部变量
+    const scrollHandler = () => {
+      if (displayLayer && this.inputEl) {
+        displayLayer.scrollTop = this.inputEl.scrollTop;
+      }
+    };
+    
+    // 使用节流版本的更新函数
+    this.updateHighlightBound = this.throttle(updateHighlight, 50); // 降低延迟提高响应速度
+    this.scrollHandlerBound = scrollHandler;
+    
+    // 添加事件监听器
+    this.inputEl.addEventListener('input', this.updateHighlightBound);
+    this.inputEl.addEventListener('scroll', this.scrollHandlerBound);
+    this.inputEl.addEventListener('focus', this.updateHighlightBound);
+    this.inputEl.addEventListener('blur', this.updateHighlightBound);
+    
+    // 初始化（确保立即更新）
+    this.updateHighlightBound();
+    // 确保没有文本重叠
+    this.ensureNoOverlappingText();
+  }
+
+    // 在MemoView类中添加
+  addHighlightStyles() {
+    // 移除可能存在的旧样式
+    const oldStyle = document.getElementById('memo-lite-highlight-styles');
+    if (oldStyle && oldStyle.parentNode) {
+      oldStyle.parentNode.removeChild(oldStyle);
+    }
+    
+    // 创建新样式
+    const styleEl = document.createElement('style');
+    styleEl.id = 'memo-lite-highlight-styles';
+    styleEl.textContent = `
+      .memo-lite-input-wrapper {
+        position: relative !important;
+      }
+      
+      .memo-lite-input {
         background-color: transparent !important;
+        position: relative !important;
+        z-index: 2 !important; /* 确保输入框在上层接收输入 */
       }
       
-      .memo-lite-input-wrapper .memo-lite-input::placeholder {
-        color: transparent !important; /* 确保占位符也是透明的 */
+      .memo-lite-display-layer {
+        color: var(--text-normal) !important;
       }
       
-      .memo-lite-display-layer .memo-lite-tag {
-        color: #40c463 !important; /* 浅绿色 */
+      .memo-lite-display-placeholder {
+        color: var(--text-muted) !important;
+        opacity: 0.7 !important;
+      }
+      
+      .memo-lite-tag {
+        color: #40c463 !important;
         font-weight: 500 !important;
         background-color: rgba(64, 196, 99, 0.1) !important;
         border-radius: 4px !important;
-        padding: 0 !important;
+        padding: 0px 2px !important;
+      }
+    `;
+    
+    document.head.appendChild(styleEl);
+    return styleEl;
+  }
+  // 添加专门的样式解决重叠问题
+  ensureNoOverlappingText() {
+    if (!this.inputEl || !this.displayLayer) return;
+    
+    // 添加专门的CSS规则
+    const styleEl = document.createElement('style');
+    styleEl.id = 'memo-lite-overlap-fix';
+    styleEl.textContent = `
+      .memo-lite-input {
+        color: transparent !important;
+        caret-color: var(--text-normal) !important;
+        background: transparent !important;
       }
       
-      /* 自定义占位符样式 */
+      .memo-lite-display-layer {
+        color: var(--text-normal) !important;
+        background: transparent !important;
+      }
+      
       .memo-lite-display-placeholder {
         color: var(--text-muted) !important;
         opacity: 0.7 !important;
       }
     `;
-    document.head.appendChild(styleElement);
     
-    // 5. 优化高亮处理函数
-    const updateHighlight = () => {
-      // 获取输入文本和滚动位置
-      const text = this.inputEl.value;
-      const scrollTop = this.inputEl.scrollTop;
-      
-      // 如果输入框为空，显示自定义占位符
-      // 如果输入框为空，显示自定义占位符
-    if (!text) {
-      displayLayer.empty();
-      const placeholder = displayLayer.createSpan({ cls: 'memo-lite-display-placeholder' });
-      placeholder.setText('记录你的灵感...\n使用 #标签 来分类');
-    } else {
-      // 否则高亮标签
-      displayLayer.empty();
-      const parts = text.split(/(#[^\s#]+)/g);
-      parts.forEach(part => {
-        if (part.startsWith('#')) {
-          // 这是一个标签
-          const tagSpan = displayLayer.createSpan({ cls: 'memo-lite-tag' });
-          tagSpan.setText(part);
-        } else if (part) {
-          // 这是普通文本
-          displayLayer.createSpan().setText(part);
-        }
-      });
+    // 移除可能存在的旧样式
+    const oldStyle = document.getElementById('memo-lite-overlap-fix');
+    if (oldStyle && oldStyle.parentNode) {
+      oldStyle.parentNode.removeChild(oldStyle);
     }
+    
+    document.head.appendChild(styleEl);
+  } 
+  // 添加清理方法
+  cleanupHighlightEvents() {
+    if (this.inputEl) {
+      // 恢复输入框默认样式
+      this.inputEl.style.color = 'var(--text-normal)';
+      this.inputEl.style.caretColor = 'var(--text-normal)';
       
-      // 同步滚动位置
-      displayLayer.scrollTop = scrollTop;
-    };
+      // 移除事件监听器
+      if (this.updateHighlightBound) {
+        this.inputEl.removeEventListener('input', this.updateHighlightBound);
+        this.inputEl.removeEventListener('focus', this.updateHighlightBound);
+        this.inputEl.removeEventListener('blur', this.updateHighlightBound);
+      }
+      
+      if (this.scrollHandlerBound) {
+        this.inputEl.removeEventListener('scroll', this.scrollHandlerBound);
+      }
+    }
     
-    // 6. 清理和重新添加事件监听器
-    // 首先移除可能存在的旧监听器以避免重复
-    this.inputEl.removeEventListener('input', updateHighlight);
-    this.inputEl.removeEventListener('scroll', updateHighlight);
-    this.inputEl.removeEventListener('focus', updateHighlight);
-    this.inputEl.removeEventListener('blur', updateHighlight);
+    // 移除显示层
+    if (this.displayLayer && this.displayLayer.parentElement) {
+      if (this.displayLayer.parentElement.contains(this.displayLayer)) {
+        this.displayLayer.parentElement.removeChild(this.displayLayer);
+      }
+    }
     
-    // 添加新的监听器
-    this.inputEl.addEventListener('input', updateHighlight);
-    this.inputEl.addEventListener('scroll', () => {
-      displayLayer.scrollTop = this.inputEl.scrollTop;
-    });
-    this.inputEl.addEventListener('focus', updateHighlight);
-    this.inputEl.addEventListener('blur', updateHighlight);
-    
-    // 7. 初始化（确保立即更新）
-    updateHighlight();
+    // 重置引用
+    this.displayLayer = null;
+    this.updateHighlightBound = null;
+    this.scrollHandlerBound = null;
   }
   // 在setupRealTimeTagHighlight之后添加这个方法
   calibrateDisplayLayer() {
@@ -1149,40 +1397,30 @@ export class MemoView extends ItemView {
   }
 // 恢复输入框并设置基本样式
   restoreInputBox() {
-  // 直接使用 this.inputEl
-  if (this.inputEl) {
+    if (!this.inputEl) return;
+    
     // 恢复输入框的基本样式
     this.inputEl.style.opacity = '1';
     this.inputEl.style.color = 'var(--text-normal)';
     this.inputEl.style.caretColor = 'var(--text-normal)';
     this.inputEl.style.backgroundColor = 'var(--background-primary)';
     
-    // 移除父元素中可能影响输入框的元素
+    // 移除可能存在的显示层
     const parentElement = this.inputEl.parentElement;
     if (parentElement) {
-      const preview = parentElement.querySelector('.memo-lite-input-preview');
-      if (preview) preview.remove();
+      const displayLayer = parentElement.querySelector('.memo-lite-display-layer');
+      if (displayLayer) {
+        parentElement.removeChild(displayLayer);
+      }
       
-      const fakeCursor = parentElement.querySelector('.memo-lite-fake-cursor');
-      if (fakeCursor) fakeCursor.remove();
-    }
-  }
-  
-  // 添加新的样式，确保所有标签都使用绿色
-  const styleElement = document.createElement('style');
-  styleElement.textContent = `
-    .memo-lite-tag {
-      color: #40c463 !important; /* 浅绿色 */
-      font-weight: 500 !important;
+      const preview = parentElement.querySelector('.memo-lite-input-preview');
+      if (preview) {
+        parentElement.removeChild(preview);
+      }
     }
     
-    .memo-lite-memo-content .memo-lite-tag {
-      background-color: rgba(64, 196, 99, 0.1) !important;
-      border-radius: 4px !important;
-      padding: 0px 2px !important;
-    }
-  `;
-  document.head.appendChild(styleElement);
+    // 重置所有事件监听器
+    this.cleanupHighlightEvents();
   }
 // 在onOpen方法中，修改输入框创建部分代码，增加一个包装容器
 // 找到创建输入框的代码，例如:
@@ -1244,38 +1482,11 @@ export class MemoView extends ItemView {
     this.activityData = await this.memoManager.getActivityData();
     //应用高亮效果
     this.highlightTagsInInput();
-    // 更新UI
-    // 更新统计信息
-  
-    this.statsEl.empty();
-  
-    // 创建统计卡片容器
-    const statsWrapper = this.statsEl.createDiv({ cls: 'memo-lite-stats-wrapper' });
-
-    // 笔记数量统计卡片
-    const memoStatItem = statsWrapper.createDiv({ cls: 'memo-lite-stat-item' });
-    memoStatItem.createEl('h2', { text: String(this.memos.length) });
-    memoStatItem.createEl('p', { text: 'Memos' });
-
-    // 标签数量统计卡片
-    const tagStatItem = statsWrapper.createDiv({ cls: 'memo-lite-stat-item' });
-    tagStatItem.createEl('h2', { text: String(this.tagStats.length) });
-    tagStatItem.createEl('p', { text: '标签' });
-
-    // 添加天数统计卡片
-    // 计算有记录的天数
-    const activeDaysCount = new Set(this.memos.map(memo => 
-    moment(memo.date).format('YYYY-MM-DD')
-    )).size;
-
-    const daysStatItem = statsWrapper.createDiv({ cls: 'memo-lite-stat-item' });
-    daysStatItem.createEl('h2', { text: String(activeDaysCount) });
-    daysStatItem.createEl('p', { text: '天' });
     
-// 更新热力图
-    // 渲染热力图
+    // 更新统计信息、热力图和标签列表
     this.updateHeatmap();
     this.updateTagsList();
+    
     // 根据筛选条件获取要显示的备忘录
     const filteredMemos = this.memos.filter(memo => {
       // 按日期筛选
@@ -1289,38 +1500,87 @@ export class MemoView extends ItemView {
       }
       return true;
     });
-    // 更新备忘录列表
+    
     // 清空备忘录列表
     this.memoListEl.empty();
     
-// 找到遍历备忘录的代码，替换为以下代码
-
-// 遍历并显示过滤后的备忘录
-// 遍历并显示过滤后的备忘录
-  filteredMemos.forEach(memo => {
-    const memoEl = this.memoListEl.createDiv({ cls: 'memo-lite-memo-item' });
+    // 修改：设置初始批次大小，只加载部分备忘录
+    const batchSize = 30; // 每批加载的数量
+    let loadedCount = 0;
     
-    // 创建备忘录内容区域
-    const contentEl = memoEl.createDiv({ cls: 'memo-lite-memo-content' });
+    const renderNextBatch = () => {
+      const endIndex = Math.min(loadedCount + batchSize, filteredMemos.length);
+      const batch = filteredMemos.slice(loadedCount, endIndex);
+      
+      this.renderMemosBatch(batch);
+      loadedCount = endIndex;
+      
+      // 如果还有更多数据，添加"加载更多"按钮
+      if (loadedCount < filteredMemos.length) {
+        const loadMoreContainer = this.memoListEl.createDiv({ 
+          cls: 'memo-lite-load-more-container'
+        });
+        // 样式代码...
+        loadMoreContainer.style.textAlign = 'center';
+        loadMoreContainer.style.padding = '15px 0';
+        loadMoreContainer.style.cursor = 'pointer';
+        
+        const loadMoreButton = loadMoreContainer.createEl('button', {
+          cls: 'memo-lite-load-more-button',
+          text: `加载更多 (${filteredMemos.length - loadedCount})`
+        });
+        
+        loadMoreButton.style.padding = '8px 16px';
+        loadMoreButton.style.borderRadius = '4px';
+        loadMoreButton.style.backgroundColor = 'var(--interactive-accent)';
+        loadMoreButton.style.color = 'var(--text-on-accent)';
+        loadMoreButton.style.border = 'none';
+        loadMoreButton.style.cursor = 'pointer';
+        
+        // 存储事件处理函数引用，便于清理
+        const loadMoreHandler = () => {
+          loadMoreContainer.remove();
+          renderNextBatch();
+        };
+        
+        loadMoreButton.addEventListener('click', loadMoreHandler);
+        (loadMoreButton as any).memoLiteLoadMoreHandler = loadMoreHandler;
+      }
+    };
     
-    // 处理内容中的标签，使其高亮显示
-    const processedContent = memo.content.replace(/#([^\s#]+)/g, '<span class="memo-lite-tag">#$1</span>');
-    contentEl.innerHTML = processedContent;
+    // 初始渲染
+    renderNextBatch();
     
-    // 创建备忘录日期显示
-    const dateEl = memoEl.createDiv({ cls: 'memo-lite-memo-date' });
-    dateEl.setText(moment(memo.date).format(this.settings.dateFormat));
-
-    // 绑定卡片事件
-    this.attachCardEvents(memoEl, memo);
-  });
-    //设置实时标签高亮
+    // 设置实时标签高亮
     this.setupRealTimeTagHighlight();
     // 校准显示层
     setTimeout(() => this.calibrateDisplayLayer(), 100);
-  
   }
- 
+  
+  // 新增方法：渲染一批备忘录
+  renderMemosBatch(memos: Memo[]) {
+    memos.forEach(memo => {
+      const memoEl = this.memoListEl.createDiv({ cls: 'memo-lite-memo-item' });
+      // 设置相对定位
+      memoEl.style.position = 'relative';
+      
+      // 创建备忘录内容区域
+      const contentEl = memoEl.createDiv({ cls: 'memo-lite-memo-content' });
+      
+      // 处理内容中的标签，使其高亮显示
+      this.safelyRenderContent(contentEl, memo.content);
+      
+      // 创建备忘录日期显示
+      const dateEl = memoEl.createDiv({ cls: 'memo-lite-memo-date' });
+      dateEl.setText(moment(memo.date).format(this.settings.dateFormat));
+  
+      // 只保留"双击编辑"的提示按钮，或者完全移除它
+      // 删除原来的删除按钮创建代码
+  
+      // 绑定卡片事件
+      this.attachCardEvents(memoEl, memo);
+    });
+  }
   // 添加辅助方法
   escapeHtml(text: string): string {
     const div = document.createElement('div');
@@ -1611,7 +1871,26 @@ export class MemoView extends ItemView {
               }
             });
         });
-        
+         // 添加这段新代码来处理标签点击
+        const contentEl = memoEl.querySelector('.memo-lite-memo-content');
+        if (contentEl) {
+          const tags = contentEl.querySelectorAll('.memo-lite-tag');
+          tags.forEach(tag => {
+            const tagClickHandler = (e: MouseEvent) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const tagText = tag.textContent?.slice(1); // 去掉#号
+              if (tagText) {
+                this.activeTag = tagText;
+                this.activeDate = null;
+                this.loadData();
+              }
+            };
+            
+            tag.addEventListener('click', tagClickHandler);
+            (tag as any).memoLiteTagClickHandler = tagClickHandler; // 存储引用以便清理
+          });
+        }
         menu.showAtMouseEvent(e);
       });
     
@@ -1668,6 +1947,36 @@ export class MemoView extends ItemView {
           }
         });
         
+        // 在双击事件处理程序中跟踪原始文本 - 修改这部分
+        let originalHtml = '';
+        let currentEditText = memo.content;
+        
+        // 修改这行 - 使用已存在的processedContent变量代替taggedContent
+        editableDiv.innerHTML = processedContent;
+        originalHtml = editableDiv.innerHTML; // 保存初始HTML
+        
+        // 创建一个独立的函数来获取当前编辑文本
+        const getEditedText = () => {
+          return currentEditText;
+        };
+
+        // 添加输入事件监听器，更新当前文本
+        // 添加输入事件监听器 - 完整实现版本，保留高亮功能且修复光标问题
+        editableDiv.addEventListener('input', function(e) {
+          // 更新当前文本
+          currentEditText = editableDiv.innerText || '';
+          
+          // 清除上一个定时器
+          if (debounceTimeout) {
+            clearTimeout(debounceTimeout);
+          }
+          
+          // 设置新的定时器，延迟处理高亮
+          debounceTimeout = window.setTimeout(() => {
+            tagHighlighter.highlight(editableDiv);
+          }, 150); // 增加延迟时间到150ms，减少处理频率
+        });
+  
         // 将原始内容中的标签包装在span元素中，实现高亮
         const taggedContent = originalContent.replace(/#([^\s#]+)/g, '<span class="memo-lite-tag">#$1</span>');
         editableDiv.innerHTML = taggedContent;
@@ -1834,6 +2143,7 @@ export class MemoView extends ItemView {
         // 监听输入事件以应用标签高亮
         // 注意：这种方法可能会影响光标位置，使用节流函数减少处理频率
         let inputTimer: number | null = null;
+        /*
         editableDiv.addEventListener('input', (e) => {
           // 清除上一个定时器
           if (inputTimer !== null) {
@@ -1848,6 +2158,184 @@ export class MemoView extends ItemView {
               processHighlightTags();
             }
           }, 300); // 300ms延迟，避免频繁处理
+        });
+        */
+       // 在创建editableDiv之前添加样式
+          const styleElement = document.createElement('style');
+          styleElement.textContent = `
+            .memo-lite-memo-edit-editable #tag,
+            .memo-lite-memo-edit-editable [data-tag="true"] {
+              color: #40c463 !important;
+              font-weight: 500 !important;
+              background-color: rgba(64, 196, 99, 0.1) !important;
+              border-radius: 4px !important;
+              padding: 0px 2px !important;
+            }
+          `;
+          document.head.appendChild(styleElement);
+       // 替换为以下简化版本，暂时禁用自动高亮处理
+       /* 
+       editableDiv.addEventListener('input', (e) => {
+          // 不执行自动高亮，只保留原始文本
+          // 如果需要，可以添加简单的颜色处理
+          const currentText = editableDiv.innerText;
+          // 保存原始的选择位置
+          const selection = window.getSelection();
+          const range = selection?.getRangeAt(0);
+          const offset = range?.startOffset || 0;
+          
+          // 不再执行复杂的高亮处理
+        });
+        */
+        // 将原有的复杂标签高亮代码替换为更简单的版本
+        // 添加输入事件监听器 - 完整实现版本，保留高亮功能且修复光标问题
+        // 创建一个辅助对象来跟踪高亮标签的位置，而不修改DOM
+// 定义标签信息类型
+        interface TagInfo {
+          start: number;
+          end: number;
+          text: string;
+        }
+
+        // 创建一个辅助对象来跟踪高亮标签的位置，而不修改DOM
+        // 替换原有的tagHighlighter对象
+        const tagHighlighter = {
+          lastText: '',
+          originalText: '', // 新增：保存原始文本内容
+          
+          highlight: function(div: HTMLElement) {
+            // 获取当前文本内容
+            const currentText = div.innerText;
+            // 保存原始文本
+            this.originalText = currentText;
+            // 如果内容没有变化，不需要处理
+            if (currentText === this.lastText) {
+              return;
+            }
+            
+            // 计算光标的字符位置
+            const selection = window.getSelection();
+            let cursorPosition = -1;
+            
+            if (selection && selection.rangeCount > 0) {
+              const range = selection.getRangeAt(0);
+              cursorPosition = this.getTextPosition(div, range.startContainer, range.startOffset);
+            }
+            
+            // 应用高亮
+            this.applyHighlights(div);
+            
+            // 恢复光标位置
+            if (cursorPosition >= 0) {
+              this.restoreCursorPosition(div, cursorPosition);
+            }
+            
+            this.lastText = currentText;
+          },
+          
+          getTextPosition: function(root: Node, node: Node, offset: number): number {
+            if (!root.contains(node)) return -1;
+            
+            let position = 0;
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+            let currentNode = walker.nextNode();
+            
+            while (currentNode) {
+              if (currentNode === node) {
+                return position + offset;
+              }
+              position += currentNode.nodeValue?.length || 0;
+              currentNode = walker.nextNode();
+            }
+            
+            return -1;
+          },
+          
+          // 获取原始文本的方法 - 移到这里，作为tagHighlighter的直接方法
+          getOriginalText: function() {
+            return this.originalText;
+          },
+          
+          applyHighlights: function(div: HTMLElement) {
+            const text = div.innerText;
+            const tempDiv = document.createElement('div');
+            
+            const parts = text.split(/(#[^\s#]+)/g);
+            parts.forEach(part => {
+              if (part.startsWith('#')) {
+                const span = document.createElement('span');
+                span.className = 'memo-lite-tag';
+                span.textContent = part;
+                tempDiv.appendChild(span);
+              } else if (part) {
+                tempDiv.appendChild(document.createTextNode(part));
+              }
+            });
+            
+            div.innerHTML = '';
+            while (tempDiv.firstChild) {
+              div.appendChild(tempDiv.firstChild);
+            }
+          },
+          
+          restoreCursorPosition: function(div: HTMLElement, position: number) {
+            let currentPos = 0;
+            const walker = document.createTreeWalker(div, NodeFilter.SHOW_TEXT, null);
+            
+            let node = walker.nextNode();
+            while (node) {
+              const nodeLength = node.nodeValue?.length || 0;
+              
+              if (currentPos + nodeLength >= position) {
+                const range = document.createRange();
+                range.setStart(node, position - currentPos);
+                range.collapse(true);
+                
+                const selection = window.getSelection();
+                if (selection) {
+                  selection.removeAllRanges();
+                  selection.addRange(range);
+                }
+                return;
+              }
+              
+              currentPos += nodeLength;
+              node = walker.nextNode();
+            }
+          }
+        };
+
+        // 当文本发生变化时处理高亮
+        // 使用防抖，保证只在用户停止输入后处理
+        let debounceTimeout: number | null = null;
+        editableDiv.addEventListener('input', function() {
+          // 清除上一个超时
+          if (debounceTimeout) {
+            clearTimeout(debounceTimeout);
+          }
+          
+          // 设置新的超时
+          debounceTimeout = window.setTimeout(() => {
+            tagHighlighter.highlight(editableDiv);
+          }, 50); // 减少延迟时间，让效果更流畅
+        });
+
+        // 初始高亮
+        tagHighlighter.highlight(editableDiv);
+
+        // 焦点和模糊事件也处理高亮
+        editableDiv.addEventListener('focus', () => {
+          tagHighlighter.highlight(editableDiv);
+        });
+
+        // 对失焦事件的处理函数做一点小改动
+        editableDiv.addEventListener('blur', () => {
+          // 失焦时强制执行一次高亮，并确保清除任何待处理的超时
+          if (debounceTimeout) {
+            clearTimeout(debounceTimeout);
+            debounceTimeout = null; // 重置为null，确保清理彻底
+          }
+          tagHighlighter.highlight(editableDiv);
         });
         
         // 失去焦点时处理高亮
@@ -1890,7 +2378,7 @@ export class MemoView extends ItemView {
         memoEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         
         // 聚焦到可编辑div
-        setTimeout(() => {
+        const focusEditableDivTimeoutId = setTimeout(() => {
           editableDiv.focus();
           
           // 将光标移到末尾
@@ -1903,6 +2391,7 @@ export class MemoView extends ItemView {
             selection.addRange(range);
           }
         }, 10);
+        this.timeouts.push(focusEditableDivTimeoutId);
         
         // 添加取消事件
         cancelButton.addEventListener('click', () => {
@@ -1932,66 +2421,86 @@ export class MemoView extends ItemView {
         });
         
         // 添加保存事件
+        // 在saveButton的点击事件处理中修改
         saveButton.addEventListener('click', async () => {
-          // 移除右键菜单拦截器
-          memoEl.removeEventListener('contextmenu', originalContextMenuHandler, true);
-          // 移除添加的样式
-          if (styleEl.parentNode) {
-            document.head.removeChild(styleEl);
-          }
-          
-          // 获取纯文本内容（不包含HTML标签）
-          const newContent = editableDiv.innerText.trim();
-          
-          if (newContent) {
-            // 添加内容验证
-            if (!this.memoManager.validateContent(newContent)) {
+          try {
+            // 使用跟踪的原始文本而不是从DOM获取
+            const contentToSave = currentEditText.trim();
+            console.log("保存的内容:", contentToSave);
+            
+            if (!contentToSave) {
+              new Notice('笔记内容不能为空');
+              return;
+            }
+            
+            // 清理DOM元素和事件监听器
+            memoEl.removeEventListener('contextmenu', originalContextMenuHandler, true);
+            
+            // 移除样式元素
+            if (styleEl && styleEl.parentNode) {
+              document.head.removeChild(styleEl);
+            }
+            if (styleElement && styleElement.parentNode) {
+              document.head.removeChild(styleElement);
+            }
+            
+            // 验证和保存内容
+            if (!this.memoManager.validateContent(contentToSave)) {
               new Notice('内容包含不允许的字符或格式');
               return;
-    }
-            // 保存新内容
-            await this.memoManager.editMemo(memo, newContent);
-            // 重新加载数据
-            await this.loadData();
-            // 显示通知
-            new Notice('笔记已更新');
-          } else {
-            // 如果内容为空，恢复原始内容
-            memoEl.empty();
+            }
             
-            const contentEl = memoEl.createDiv({ cls: 'memo-lite-memo-content' });
-            contentEl.innerHTML = processedContent;
+            const result = await this.memoManager.editMemo(memo, contentToSave);
             
-            const dateEl = memoEl.createDiv({ cls: 'memo-lite-memo-date' });
-            dateEl.setText(moment(memo.date).format(this.settings.dateFormat));
-            
-            this.attachCardEvents(memoEl, memo);
-            
-            // 清除当前编辑卡片引用
-            this.currentEditingCard = null;
+            if (result) {
+              this.currentEditingCard = null;
+              await this.loadData();
+              new Notice('笔记已更新');
+            } else {
+              new Notice('保存失败，请重试');
+            }
+          } catch (error) {
+            console.error("保存出错:", error);
+            new Notice('保存过程中发生错误');
           }
         });
         
         // 添加点击外部关闭事件
-        const handleDocumentClick = (evt: MouseEvent) => {
+        // 添加点击外部关闭事件 - 修改为使用mousedown事件代替click
+        const handleDocumentMouseDown = (evt: MouseEvent) => {
+          // 忽略选择操作造成的点击
+          if (window.getSelection()?.toString()) {
+            return;
+          }
+          
+          // 忽略鼠标右键点击
+          if (evt.button !== 0) { // 非左键点击
+            return;
+          }
+          
           if (!editContainer.contains(evt.target as Node) && this.currentEditingCard === memoEl) {
             // 如果点击在编辑区域外且当前正在编辑，自动取消
             cancelButton.click();
-            document.removeEventListener('click', handleDocumentClick);
+            document.removeEventListener('mousedown', handleDocumentMouseDown);
           }
         };
-        
+
         // 延迟添加点击事件，避免当前点击立即触发
-        setTimeout(() => {
-          document.addEventListener('click', handleDocumentClick);
+        const documentListenerTimeoutId = setTimeout(() => {
+          // 使用mousedown事件代替click事件
+          document.addEventListener('mousedown', handleDocumentMouseDown);
           
           // 保存这个事件处理函数，以便在视图关闭时清除
-          // 可以使用WeakMap或其他方式关联元素和事件处理函数
           if (!this.cardEventHandlers) {
             this.cardEventHandlers = new WeakMap();
           }
-          this.cardEventHandlers.set(memoEl, handleDocumentClick);
+          
+          // 只保留这一个版本
+          this.cardEventHandlers.set(memoEl, {
+            documentClick: handleDocumentMouseDown // 虽然名称未改，但引用的是新函数
+          });
         }, 100);
+        this.timeouts.push(documentListenerTimeoutId);
       });
   }
  // 在 MemoView 类中添加 onClose 方法
@@ -1999,7 +2508,14 @@ export class MemoView extends ItemView {
   async onClose() {
     // 移除文档点击事件监听器
     document.removeEventListener('click', this.documentClickHandler);
+    // 清理高亮事件
+    this.cleanupHighlightEvents();
     
+    // 如果显示层还存在，移除它
+    if (this.displayLayer && this.displayLayer.parentElement) {
+      this.displayLayer.parentElement.removeChild(this.displayLayer);
+    }
+    this.displayLayer = null;
     // 移除样式元素
     if (this.styleElement && document.head.contains(this.styleElement)) {
       document.head.removeChild(this.styleElement);
@@ -2008,23 +2524,33 @@ export class MemoView extends ItemView {
     // 移除输入框相关的事件监听器
     if (this.inputEl) {
       this.inputEl.removeEventListener('input', this.boundHandleTagAutocompletion);
-      this.inputEl.removeEventListener('input', this.boundHighlightTagsInInput);
-      this.inputEl.removeEventListener('scroll', this.boundHighlightTagsInInput);
-      this.inputEl.removeEventListener('focus', this.boundHighlightTagsInInput);
-      this.inputEl.removeEventListener('keydown', this.boundHandleKeydown);
+      this.inputEl.removeEventListener('input', this.throttledHighlight);
+      this.inputEl.removeEventListener('scroll', this.throttledHighlight);
+      this.inputEl.removeEventListener('focus', this.throttledHighlight);
+      this.inputEl.removeEventListener('keydown', this.throttledHighlight);
     }
     
     // 移除提交按钮事件监听器
     if (this.submitButton) {
       this.submitButton.removeEventListener('click', this.boundSubmitButtonClick);
     }
-    
+      // 移除添加的编辑按钮样式
+    if (this.editButtonStyle && document.head.contains(this.editButtonStyle)) {
+      document.head.removeChild(this.editButtonStyle);
+    }
+    // 添加这行清理代码
+    if (this.hideTopRightEditButtonStyle && document.head.contains(this.hideTopRightEditButtonStyle)) {
+      document.head.removeChild(this.hideTopRightEditButtonStyle);
+    }
     // 移除标签头部事件监听器
     const tagsHeader = this.contentEl.querySelector('.memo-lite-tags-header');
     if (tagsHeader) {
       tagsHeader.removeEventListener('click', this.boundTagsHeaderClick);
     }
-    
+    // 在onClose方法中添加
+    if (this.hideEditTextStyle && document.head.contains(this.hideEditTextStyle)) {
+      document.head.removeChild(this.hideEditTextStyle);
+    }
     // 移除搜索框事件监听器
     if (this.searchEl) {
       this.searchEl.removeEventListener('input', this.boundSearchInput);
@@ -2054,7 +2580,6 @@ export class MemoView extends ItemView {
     }
     
     // 清理标签建议菜单
-    // 清理标签建议菜单
     if (this.tagSuggestionMenu) { 
       // 如果TagSuggestionMenu类中有destroy方法，调用它
       if (typeof this.tagSuggestionMenu.destroy === 'function') {
@@ -2066,16 +2591,131 @@ export class MemoView extends ItemView {
       this.tagSuggestionMenu = null;
     }
     // 清理所有卡片相关的临时事件监听器
+    // 清理卡片相关的临时事件监听器
     if (this.cardEventHandlers) {
+        this.memoListEl?.querySelectorAll('.memo-lite-memo-item').forEach(card => {
+          const enterHandler = (card as any).memoLiteMouseEnterHandler;
+          const leaveHandler = (card as any).memoLiteMouseLeaveHandler;
+          
+          if (enterHandler) {
+            card.removeEventListener('mouseenter', enterHandler);
+          }
+          
+          if (leaveHandler) {
+            card.removeEventListener('mouseleave', leaveHandler);
+          }
+          
+          const editButton = card.querySelector('.memo-lite-edit-button');
+          if (editButton) {
+            const clickHandler = (editButton as any).memoLiteClickHandler;
+            if (clickHandler) {
+              editButton.removeEventListener('click', clickHandler);
+            }
+          }
+        });
+            // 清理所有备忘录项上的事件监听器
       this.memoListEl?.querySelectorAll('.memo-lite-memo-item').forEach(card => {
-        const handler = this.cardEventHandlers.get(card);
-        if (handler) {
-          document.removeEventListener('click', handler);
-        }
+        // 移除所有已知类型的事件监听器
+        card.removeEventListener('mouseenter', (card as any).memoLiteMouseEnterHandler);
+        card.removeEventListener('mouseleave', (card as any).memoLiteMouseLeaveHandler);
+        card.removeEventListener('contextmenu', (card as any).memoLiteContextMenuHandler);
+        card.removeEventListener('dblclick', (card as any).memoLiteDblClickHandler);
+        
+        // 清理标签项的点击事件
+        card.querySelectorAll('.memo-lite-tag').forEach(tag => {
+          tag.removeEventListener('click', (tag as any).memoLiteTagClickHandler);
+        });
+      });
+      
+      // 清理所有标签项上的事件监听器
+      this.tagListEl?.querySelectorAll('.memo-lite-tag-item').forEach(tagItem => {
+        tagItem.removeEventListener('click', (tagItem as any).memoLiteTagClickHandler);
+        tagItem.removeEventListener('contextmenu', (tagItem as any).memoLiteTagContextMenuHandler);
+      });
+      
+      // 清理热力图上的事件监听器
+      this.heatmapEl?.querySelectorAll('.memo-lite-heatmap-day').forEach(day => {
+        day.removeEventListener('click', (day as any).memoLiteDayClickHandler);
       });
     }
+     // 清理卡片的mouseenter和mouseleave事件
+   // 清理卡片的mouseenter和mouseleave事件
+    // 清理卡片的mouseenter和mouseleave事件
+  // 在onClose方法中修改代码
+    this.memoListEl?.querySelectorAll('.memo-lite-memo-item').forEach(card => {
+      // 由于card是Element类型，需要先转换为HTMLElement才能访问dataset属性
+      const htmlCard = card as HTMLElement;
+      
+      // 方法1：通过保存的引用清理
+      if (htmlCard.dataset.hasMouseHandlers === 'true') {
+        const enterHandler = (htmlCard as any).memoLiteMouseEnterHandler;
+        const leaveHandler = (htmlCard as any).memoLiteMouseLeaveHandler;
+        
+        if (enterHandler) {
+          htmlCard.removeEventListener('mouseenter', enterHandler);
+          delete (htmlCard as any).memoLiteMouseEnterHandler;
+        }
+        
+        if (leaveHandler) {
+          htmlCard.removeEventListener('mouseleave', leaveHandler);
+          delete (htmlCard as any).memoLiteMouseLeaveHandler;
+        }
+        
+        const editButton = htmlCard.querySelector('.memo-lite-edit-button') as HTMLElement;
+        if (editButton) {
+          const clickHandler = (editButton as any).memoLiteClickHandler;
+          if (clickHandler) {
+            editButton.removeEventListener('click', clickHandler);
+            delete (editButton as any).memoLiteClickHandler;
+          }
+        }
+      }
+      
+      // 方法2：通过WeakMap清理（这部分代码不需要修改，因为不涉及dataset）
+      // 方法2：通过WeakMap清理
+      if (this.cardEventHandlers && this.cardEventHandlers.has(card)) {
+        const handlers = this.cardEventHandlers.get(card);
+        if (handlers) {
+          if (handlers.mouseEnter) {
+            card.removeEventListener('mouseenter', handlers.mouseEnter);
+          }
+          if (handlers.mouseLeave) {
+            card.removeEventListener('mouseleave', handlers.mouseLeave);
+          }
+          
+          if (handlers.button && handlers.buttonClick) {
+            handlers.button.removeEventListener('click', handlers.buttonClick);
+          }
+          if (handlers.documentClick) {
+            // 修改这一行，从'click'改为'mousedown'
+            document.removeEventListener('mousedown', handlers.documentClick);
+          }
+          
+          this.cardEventHandlers.delete(card);
+        }
+      }
+    });
+    // 移除搜索框事件监听器
+          if (this.searchEl) {
+            this.searchEl.removeEventListener('input', this.boundSearchInput);
+            // 添加这行以清理Enter键监听器
+            this.searchEl.removeEventListener('keydown', (this as any).searchKeydownHandler);
+          }
+        // 清理所有标签点击事件
+        this.memoListEl?.querySelectorAll('.memo-lite-tag').forEach(tag => {
+          const handler = (tag as any).memoLiteTagClickHandler;
+          if (handler) {
+            tag.removeEventListener('click', handler);
+            delete (tag as any).memoLiteTagClickHandler;
+          }
+        });
+         // 清理所有定时器
+      this.timeouts.forEach(id => {
+        window.clearTimeout(id as any);
+      });
+      this.timeouts = [];
     // 清空DOM元素
-    this.contentEl.empty();
+      this.contentEl.empty();
   }
 
     // 在MemoView类中添加一个新的辅助方法：
