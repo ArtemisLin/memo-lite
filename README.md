@@ -1,6 +1,6 @@
 # Memo Lite for Obsidian
 Memo Lite 是一个轻量级、易用的笔记插件，让你能够快速记录和管理灵感、想法和日常笔记。
-![memo-lite界面](https://example.com/path/to/your/screenshot.png)  
+![memo-lite界面](https://github.com/ArtemisLin/memo-lite/blob/main/assets/memo-lite-screenshot.png)  
 ## 特色功能
 
 ### 📝 快速记录：随时记录灵感，无需中断当前工作流
